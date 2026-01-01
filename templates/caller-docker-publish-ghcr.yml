@@ -1,0 +1,14 @@
+name: cd
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  docker:
+    uses: grrrrrrh/pipeline-kit/.github/workflows/docker-publish-ghcr.yml@main
+    with:
+      image: ghcr.io/grrrrrrh/REPO_NAME
+      context: .
+      dockerfile: Dockerfile
+      push: true

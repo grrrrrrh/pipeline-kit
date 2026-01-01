@@ -1,0 +1,12 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  go:
+    uses: grrrrrrh/pipeline-kit/.github/workflows/ci-go.yml@main
+    with:
+      go-version: "1.22.x"
+      workdir: "."
