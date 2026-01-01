@@ -1,0 +1,17 @@
+[project]
+name = "pipeline-kit"
+version = "0.1.0"
+authors = [
+    { name = "nd", email = "ndl+github@mailbox.org" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.9.18,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
