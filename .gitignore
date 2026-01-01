@@ -1,2 +1,9 @@
 
 .venv/
+
+# secrets / local config
+.env
+.env.*
+!.env.example
+*.local
+secrets/
