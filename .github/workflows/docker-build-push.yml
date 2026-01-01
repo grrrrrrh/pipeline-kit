@@ -3,7 +3,7 @@ name: docker-build-push
 on:
   workflow_call:
     inputs:
-      image:
+      tags:
         type: string
         required: true
       context:
@@ -15,9 +15,6 @@ on:
       push:
         type: boolean
         default: false
-      tags:
-        type: string
-        required: true
       platforms:
         type: string
         default: linux/amd64
