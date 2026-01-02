@@ -1,5 +1,7 @@
 # pipeline-kit
 
+Still working on it.
+
 Reusable CI/CD workflows + templates for personal projects.
 
 - Public repo, no secrets committed
