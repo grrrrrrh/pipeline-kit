@@ -1,0 +1,10 @@
+name: ci-example # rename to ci.yml and put in any repo to call ci-uni.yml
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-uni.yml
