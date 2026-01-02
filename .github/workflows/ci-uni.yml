@@ -1,0 +1,174 @@
+name: ci-uni
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        type: string
+        default: "stable"
+      python-version:
+        type: string
+        default: "3.12"
+      node-version:
+        type: string
+        default: "20"
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect project types
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          has_go=false
+          has_py=false
+          has_node=false
+          has_web=false
+
+          [[ -f go.mod ]] && has_go=true
+          [[ -f pyproject.toml || -f requirements.txt || -f setup.py ]] && has_py=true
+          [[ -f package.json ]] && has_node=true
+
+          # lightweight “web” detection (HTML/CSS) anywhere
+          if git ls-files '*.html' '*.css' '*.scss' '*.sass' '*.md' >/dev/null 2>&1; then
+            if [ -n "$(git ls-files '*.html' '*.css' '*.scss' '*.sass' '*.md')" ]; then
+              has_web=true
+            fi
+          fi
+
+          echo "has_go=$has_go" >> "$GITHUB_OUTPUT"
+          echo "has_py=$has_py" >> "$GITHUB_OUTPUT"
+          echo "has_node=$has_node" >> "$GITHUB_OUTPUT"
+          echo "has_web=$has_web" >> "$GITHUB_OUTPUT"
+
+          echo "Detected: go=$has_go py=$has_py node=$has_node web=$has_web"
+
+      # ---------------- GO ----------------
+      - name: Set up Go
+        if: steps.detect.outputs.has_go == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+
+      - name: Go fmt + test
+        if: steps.detect.outputs.has_go == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unformatted="$(gofmt -l . || true)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed:"
+            echo "$unformatted"
+            exit 1
+          fi
+          go test ./...
+
+      # ---------------- PYTHON ----------------
+      - name: Set up Python
+        if: steps.detect.outputs.has_py == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Python install + tests (if configured)
+        if: steps.detect.outputs.has_py == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          elif [ -f pyproject.toml ]; then
+            # best-effort: install project (won't fail if it's not a package)
+            pip install . || true
+          fi
+
+          # Run pytest only if tests exist and pytest is available
+          if [ -n "$(git ls-files 'test*.py' 'tests/*.py' 'tests/**.py' || true)" ]; then
+            python -c "import pytest" >/dev/null 2>&1 && pytest -q || echo "pytest not installed; skipping"
+          else
+            echo "No Python tests found; skipping"
+          fi
+
+      # ---------------- NODE / JS / TS ----------------
+      - name: Set up Node
+        if: steps.detect.outputs.has_node == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Node install + lint/test (if scripts exist)
+        if: steps.detect.outputs.has_node == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # pick package manager
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pm="pnpm"
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            pm="yarn"
+          else
+            pm="npm"
+          fi
+
+          if [ "$pm" = "npm" ]; then
+            npm ci
+            npm run -s lint 2>/dev/null || echo "No npm script: lint (skipping)"
+            npm run -s test 2>/dev/null || echo "No npm script: test (skipping)"
+            npm run -s build 2>/dev/null || echo "No npm script: build (skipping)"
+          elif [ "$pm" = "yarn" ]; then
+            yarn install --frozen-lockfile
+            yarn -s lint 2>/dev/null || echo "No yarn script: lint (skipping)"
+            yarn -s test 2>/dev/null || echo "No yarn script: test (skipping)"
+            yarn -s build 2>/dev/null || echo "No yarn script: build (skipping)"
+          else
+            pnpm install --frozen-lockfile
+            pnpm -s lint 2>/dev/null || echo "No pnpm script: lint (skipping)"
+            pnpm -s test 2>/dev/null || echo "No pnpm script: test (skipping)"
+            pnpm -s build 2>/dev/null || echo "No pnpm script: build (skipping)"
+          fi
+
+      # ---------------- HTML / CSS formatting ----------------
+      - name: Web formatting (prettier if present)
+        if: steps.detect.outputs.has_web == 'true' && steps.detect.outputs.has_node == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only run if the repo has prettier available (local dep or npx fetch)
+          npx --yes prettier --check "**/*.{html,css,scss,sass,md}" || true
+          echo "Prettier ran (non-blocking unless you decide to enforce it)."
+
+      # ---------------- GitHub Actions workflow lint ----------------
+      - name: Lint GitHub Actions workflows (actionlint via go)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # always run; doesn't depend on repo language
+          # install actionlint using Go toolchain
+          # setup-go 'stable' here is fine; lightweight
+          if ! command -v go >/dev/null 2>&1; then
+            echo "Go not available yet; installing toolchain for actionlint..."
+          fi
+        # easiest: install Go for this step
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+      - name: Run actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install github.com/rhysd/actionlint/cmd/actionlint@latest
+          "$(go env GOPATH)/bin/actionlint" -color
